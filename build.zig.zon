@@ -1,0 +1,8 @@
+.{
+    .name = .Blackhole,
+    .version = "0.1.0",
+    .fingerprint = 0x95e314afa12a92bc,
+    .paths = .{
+        "",
+    },
+}

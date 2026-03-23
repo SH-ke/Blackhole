@@ -1,2 +1,5 @@
 /build
 .vscode
+/libs
+.zig-cache
+zig-out
