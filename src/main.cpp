@@ -29,19 +29,26 @@
 #include "shader.h"
 #include "texture.h"
 
+#include <fstream>
+inline bool FileExists(const char *name) {
+  std::ifstream f(name);
+  return f.good();
+}
+static bool isChinese = true;
+
 static const int SCR_WIDTH = 1920;
 static const int SCR_HEIGHT = 1080;
 
 static float mouseX, mouseY;
 
-#define IMGUI_TOGGLE(NAME, DEFAULT)                                            \
+#define IMGUI_TOGGLE_EX(NAME, EN_LABEL, ZH_LABEL, DEFAULT)                     \
   static bool NAME = DEFAULT;                                                  \
-  ImGui::Checkbox(#NAME, &NAME);                                               \
+  ImGui::Checkbox(isChinese ? (u8##ZH_LABEL "##" #NAME) : (EN_LABEL "##" #NAME), &NAME); \
   rtti.floatUniforms[#NAME] = NAME ? 1.0f : 0.0f;
 
-#define IMGUI_SLIDER(NAME, DEFAULT, MIN, MAX)                                  \
+#define IMGUI_SLIDER_EX(NAME, EN_LABEL, ZH_LABEL, DEFAULT, MIN, MAX)           \
   static float NAME = DEFAULT;                                                 \
-  ImGui::SliderFloat(#NAME, &NAME, MIN, MAX);                                  \
+  ImGui::SliderFloat(isChinese ? (u8##ZH_LABEL "##" #NAME) : (EN_LABEL "##" #NAME), &NAME, MIN, MAX); \
   rtti.floatUniforms[#NAME] = NAME;
 
 static void glfwErrorCallback(int error, const char *description) {
@@ -114,7 +121,12 @@ int main(int, char **) {
   // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
   // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
   glfwSetCursorPosCallback(window, mouseCallback);
-  glfwSetWindowPos(window, 0, 0);
+
+  GLFWmonitor* primary = glfwGetPrimaryMonitor();
+  const GLFWvidmode* mode = glfwGetVideoMode(primary);
+  int windowedPosX = (mode->width - SCR_WIDTH) / 2;
+  int windowedPosY = (mode->height - SCR_HEIGHT) / 2;
+  glfwSetWindowPos(window, windowedPosX, windowedPosY);
 
   bool err = glewInit() != GLEW_OK;
   if (err) {
@@ -164,6 +176,12 @@ int main(int, char **) {
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     (void)io;
+    
+    if (FileExists("C:/Windows/Fonts/msyh.ttc")) {
+      io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc", 18.0f, NULL, io.Fonts->GetGlyphRangesChineseFull());
+    } else {
+      isChinese = false;
+    }
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -194,8 +212,26 @@ int main(int, char **) {
   // Main loop
   PostProcessPass passthrough("shader/passthrough.frag");
 
+  bool isFullScreen = false;
+  bool f11Pressed = false;
+
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
+
+    if (glfwGetKey(window, GLFW_KEY_F11) == GLFW_PRESS) {
+      if (!f11Pressed) {
+        f11Pressed = true;
+        isFullScreen = !isFullScreen;
+        if (isFullScreen) {
+          glfwGetWindowPos(window, &windowedPosX, &windowedPosY);
+          glfwSetWindowMonitor(window, primary, 0, 0, mode->width, mode->height, mode->refreshRate);
+        } else {
+          glfwSetWindowMonitor(window, NULL, windowedPosX, windowedPosY, SCR_WIDTH, SCR_HEIGHT, 0);
+        }
+      }
+    } else {
+      f11Pressed = false;
+    }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -225,21 +261,24 @@ int main(int, char **) {
       rtti.width = SCR_WIDTH;
       rtti.height = SCR_HEIGHT;
 
-      IMGUI_TOGGLE(gravatationalLensing, true);
-      IMGUI_TOGGLE(renderBlackHole, true);
-      IMGUI_TOGGLE(mouseControl, true);
-      IMGUI_SLIDER(cameraRoll, 0.0f, -180.0f, 180.0f);
-      IMGUI_TOGGLE(frontView, false);
-      IMGUI_TOGGLE(topView, false);
-      IMGUI_TOGGLE(adiskEnabled, true);
-      IMGUI_TOGGLE(adiskParticle, true);
-      IMGUI_SLIDER(adiskDensityV, 2.0f, 0.0f, 10.0f);
-      IMGUI_SLIDER(adiskDensityH, 4.0f, 0.0f, 10.0f);
-      IMGUI_SLIDER(adiskHeight, 0.55f, 0.0f, 1.0f);
-      IMGUI_SLIDER(adiskLit, 0.25f, 0.0f, 4.0f);
-      IMGUI_SLIDER(adiskNoiseLOD, 5.0f, 1.0f, 12.0f);
-      IMGUI_SLIDER(adiskNoiseScale, 0.8f, 0.0f, 10.0f);
-      IMGUI_SLIDER(adiskSpeed, 0.5f, 0.0f, 1.0f);
+      ImGui::Checkbox(isChinese ? u8"中英文切换 (Chinese UI)##lang" : "Chinese UI / 中文界面##lang", &isChinese);
+      ImGui::Separator();
+
+      IMGUI_TOGGLE_EX(gravatationalLensing, "Gravitational Lensing", "引力透镜效应", true);
+      IMGUI_TOGGLE_EX(renderBlackHole, "Render Black Hole", "渲染黑洞本体", true);
+      IMGUI_TOGGLE_EX(mouseControl, "Mouse Control", "开启鼠标拖拽视角", true);
+      IMGUI_SLIDER_EX(cameraRoll, "Camera Roll", "横滚角", 0.0f, -180.0f, 180.0f);
+      IMGUI_TOGGLE_EX(frontView, "Front View", "快切: 正前视图", false);
+      IMGUI_TOGGLE_EX(topView, "Top View", "快切: 顶部视图", false);
+      IMGUI_TOGGLE_EX(adiskEnabled, "Accretion Disk Enabled", "显示吸积盘", true);
+      IMGUI_TOGGLE_EX(adiskParticle, "Accretion Disk Particle", "吸积盘星云颗粒化", true);
+      IMGUI_SLIDER_EX(adiskDensityV, "A-Disk Density V", "物质密度(垂直)", 2.0f, 0.0f, 10.0f);
+      IMGUI_SLIDER_EX(adiskDensityH, "A-Disk Density H", "物质密度(水平)", 4.0f, 0.0f, 10.0f);
+      IMGUI_SLIDER_EX(adiskHeight, "A-Disk Height", "圆盘厚度", 0.55f, 0.0f, 1.0f);
+      IMGUI_SLIDER_EX(adiskLit, "A-Disk Lit", "辐射受光强度", 0.25f, 0.0f, 4.0f);
+      IMGUI_SLIDER_EX(adiskNoiseLOD, "A-Disk Noise LOD", "湍流噪声细节(LOD)", 5.0f, 1.0f, 12.0f);
+      IMGUI_SLIDER_EX(adiskNoiseScale, "A-Disk Noise Scale", "湍流噪声缩放", 0.8f, 0.0f, 10.0f);
+      IMGUI_SLIDER_EX(adiskSpeed, "A-Disk Rotate Speed", "吸积盘旋转速度", 0.5f, 0.0f, 1.0f);
 
       renderToTexture(rtti);
     }
@@ -267,7 +306,7 @@ int main(int, char **) {
     }
 
     static int bloomIterations = MAX_BLOOM_ITER;
-    ImGui::SliderInt("bloomIterations", &bloomIterations, 1, 8);
+    ImGui::SliderInt(isChinese ? u8"辉光(Bloom)模糊迭代次数##bIter" : "Bloom Iterations##bIter", &bloomIterations, 1, 8);
     for (int level = 0; level < bloomIterations; level++) {
       RenderToTextureInfo rtti;
       rtti.fragShader = "shader/bloom_downsample.frag";
@@ -303,7 +342,7 @@ int main(int, char **) {
       rtti.width = SCR_WIDTH;
       rtti.height = SCR_HEIGHT;
 
-      IMGUI_SLIDER(bloomStrength, 0.1f, 0.0f, 1.0f);
+      IMGUI_SLIDER_EX(bloomStrength, "Bloom Strength", "辉光散发强度", 0.1f, 0.0f, 1.0f);
 
       renderToTexture(rtti);
     }
@@ -317,8 +356,8 @@ int main(int, char **) {
       rtti.width = SCR_WIDTH;
       rtti.height = SCR_HEIGHT;
 
-      IMGUI_TOGGLE(tonemappingEnabled, true);
-      IMGUI_SLIDER(gamma, 2.5f, 1.0f, 4.0f);
+      IMGUI_TOGGLE_EX(tonemappingEnabled, "Tone Mapping", "后期处理: 开启色调映射", true);
+      IMGUI_SLIDER_EX(gamma, "Gamma Correction", "后期处理: Gamma 校准", 2.5f, 1.0f, 4.0f);
 
       renderToTexture(rtti);
     }
